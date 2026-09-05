@@ -54,7 +54,17 @@ export function trackBatchProgress(input: BatchProgressInput): BatchProgressTrac
         status: "running",
         mode: "spawn",
         run_in_background: false,
-        items: input.live.map((start) => startedDetail(start.item, start.result, start.skills)),
+        progress: {
+          activity: rows.map((row) => rowText(row, settled)).join("\n"),
+          startedAt,
+        },
+        items: input.live.map((start) => {
+          const status = settled.get(start.result.task_id)
+          return {
+            ...startedDetail(start.item, start.result, start.skills),
+            ...(status === undefined ? {} : { status }),
+          }
+        }),
       },
     })
   }
