@@ -197,6 +197,28 @@ describe("performXSearch", () => {
     expect(outcome.code).not.toBe("TIMEOUT")
   })
 
+  it("#given caller abort happens before deadline expiry #when both abort causes race #then the caller classification wins", async () => {
+    const controller = new AbortController()
+    const fetchImpl: XSearchFetch = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal
+        signal?.addEventListener("abort", () => {
+          setTimeout(() => {
+            const error = new Error("aborted")
+            error.name = "AbortError"
+            reject(error)
+          }, 15)
+        })
+        controller.abort()
+      })
+
+    const outcome = await performXSearch({ fetch: fetchImpl, bearer: "b", body: {}, signal: controller.signal, deadlineMs: 5 })
+
+    expect(outcome.ok).toBe(false)
+    if (outcome.ok) throw new Error("expected failure")
+    expect(outcome.code).toBe("UPSTREAM")
+  })
+
   it("#given a deadline shorter than the response #when performing the search #then the request is aborted as TIMEOUT", async () => {
     const fetchImpl: XSearchFetch = (_url, init) =>
       new Promise((_resolve, reject) => {

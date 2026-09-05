@@ -125,10 +125,13 @@ export interface PerformXSearchOptions {
 export async function performXSearch(options: PerformXSearchOptions): Promise<XSearchFetchOutcome> {
   const deadlineMs = options.deadlineMs ?? X_SEARCH_DEFAULT_DEADLINE_MS
   const controller = new AbortController()
-  let deadlineElapsed = false
-  const abortForCaller = () => controller.abort()
+  let abortCause: "caller" | "deadline" | undefined
+  const abortForCaller = () => {
+    if (abortCause === undefined) abortCause = "caller"
+    controller.abort()
+  }
   const abortForDeadline = () => {
-    deadlineElapsed = true
+    if (abortCause === undefined) abortCause = "deadline"
     controller.abort()
   }
   options.signal?.addEventListener("abort", abortForCaller)
@@ -152,9 +155,10 @@ export async function performXSearch(options: PerformXSearchOptions): Promise<XS
     }
   } catch (error) {
     if (isAbortError(error)) {
-      return options.signal?.aborted && !deadlineElapsed
-        ? { ok: false, code: "UPSTREAM", message: "xAI request was cancelled by the caller" }
-        : { ok: false, code: "TIMEOUT", message: `xAI request aborted after ${deadlineMs}ms` }
+      const deadlineElapsed = abortCause === "deadline"
+      return deadlineElapsed
+        ? { ok: false, code: "TIMEOUT", message: `xAI request aborted after ${deadlineMs}ms` }
+        : { ok: false, code: "UPSTREAM", message: "xAI request was cancelled by the caller" }
     }
     return { ok: false, code: "UPSTREAM", message: error instanceof Error ? error.message : String(error) }
   } finally {
